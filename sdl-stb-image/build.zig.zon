@@ -1,0 +1,10 @@
+.{
+    .name = "zig-SDL-STB-demo",
+    .version = "0.1.0",
+    .dependencies = .{
+        .stbi = .{
+            .url = "https://github.com/JacobCrabill/zig-stb-image/archive/3a203930ff431946ac26731dab6370eb7f21bbe2.tar.gz",
+            .hash = "1220b01a5a08e610a3a00ea722cec42c021983afcf81e444ba250adf548f2a245b1f",
+        },
+    }
+}

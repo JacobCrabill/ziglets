@@ -1,0 +1,3 @@
+[submodule "sdl-stb-image/SDL.zig"]
+	path = sdl-stb-image/thirdparty/SDL.zig
+	url = https://github.com/MasterQ32/SDL.zig
