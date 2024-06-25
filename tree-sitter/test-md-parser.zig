@@ -29,6 +29,14 @@ pub fn main() !void {
         \\    return 0;
         \\}
         \\```
+        \\
+        \\```json
+        \\{
+        \\  "foo": "bar",
+        \\  "baz": 2
+        \\}
+        \\```
+        \\
     ;
     const c_source = @as([*c]const u8, &source[0]);
 
@@ -76,10 +84,11 @@ pub fn main() !void {
         }
     }
 
-    // Create a query to look for code_fence_content
+    // Create a query to look for fenced_code_block node with info_string and code_fence_content children
+    // The query will return named captures for "infoString" and "codeBlock"
     var error_offset: u32 = undefined;
     var error_type: TSQueryError = undefined;
-    const query_string: []const u8 = "(code_fence_content) @capture";
+    const query_string: []const u8 = "(fenced_code_block (info_string) @infoString (code_fence_content) @codeBlock)";
     const c_query_string: [*c]const u8 = @as([*c]const u8, &query_string[0]);
     var query: *TSQuery = undefined;
     if (c.ts_query_new(c.tree_sitter_markdown(), c_query_string, @intCast(query_string.len), &error_offset, &error_type)) |q| {
@@ -95,17 +104,66 @@ pub fn main() !void {
 
     c.ts_query_cursor_exec(cursor, query, doc_node);
 
+    // Find the capture name for each named capture group
+    const capture_count = c.ts_query_capture_count(query);
+    for (0..capture_count) |i| {
+        std.debug.print("Capture Name: {s}\n", .{captureGroupName(query, i)});
+    }
+
+    // Just for demo purposes
+    const CodeBlock = struct {
+        language: []const u8,
+        source: []const u8,
+    };
+
     var match: TSQueryMatch = undefined;
     while (c.ts_query_cursor_next_match(cursor, &match)) {
-        std.debug.print("Query match with {d} captures\n", .{match.capture_count});
+        std.debug.print("\nQuery match with {d} captures\n", .{match.capture_count});
+
+        var block = CodeBlock{ .language = undefined, .source = undefined };
         for (0..match.capture_count) |i| {
             const capture: TSQueryCapture = match.captures[i];
             const node: TSNode = capture.node;
             const start = c.ts_node_start_byte(node);
             const end = c.ts_node_end_byte(node);
+            const capture_name = captureGroupName(query, i);
+            const content = source[start..end];
             std.debug.print("Node capture idx: {d}\n", .{capture.index});
-            std.debug.print("  Capture node name: {s} [{d} {d}]\n", .{ c.ts_node_type(node), start, end });
-            std.debug.print("  Content: {s}\n", .{source[start..end]});
+            std.debug.print("  Capture name: {s}\n", .{capture_name});
+            std.debug.print("  Captured node name: {s} [{d} {d}]\n", .{ c.ts_node_type(node), start, end });
+            std.debug.print("  Content: {s}\n", .{content});
+
+            if (std.mem.eql(u8, capture_name, "infoString")) {
+                block.language = content;
+            } else if (std.mem.eql(u8, capture_name, "codeBlock")) {
+                block.source = content;
+            }
+
+            // // Find the language tag for the block (the hard way)
+            // var sibling = c.ts_node_prev_sibling(node);
+            // while (!c.ts_node_is_null(sibling)) : (sibling = c.ts_node_prev_sibling(sibling)) {
+            //     if (std.mem.eql(u8, std.mem.span(c.ts_node_type(sibling)), "info_string")) {
+            //         std.debug.print("Found info_string of code block! {any}\n", .{sibling});
+            //         const child_count = c.ts_node_child_count(sibling);
+            //         for (0..child_count) |j| {
+            //             // Extract the language from the info_string
+            //             const child = c.ts_node_child(sibling, @intCast(j));
+            //             std.debug.print("  Child: {s}\n", .{c.ts_node_type(child)});
+            //             const language = source[c.ts_node_start_byte(child)..c.ts_node_end_byte(child)];
+            //             std.debug.print("  {s}\n", .{language});
+            //             // From here, can map 'language' to tree_sitter_<language>()
+            //             // and parse the code-block content using it
+            //             // I'd probably setup a StringHashMap(TSLanguage)
+            //         }
+            //     }
+            // }
         }
+
+        std.debug.print("Have CodeBlock: {any}\n", .{block});
     }
+}
+
+fn captureGroupName(query: *TSQuery, idx: usize) []const u8 {
+    var len: u32 = 0;
+    return c.ts_query_capture_name_for_id(query, @intCast(idx), &len)[0..len];
 }
